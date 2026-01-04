@@ -1,7 +1,5 @@
 import os
-import json
 import time
-import requests
 import logging
 from datetime import datetime
 from web3 import Web3
@@ -9,6 +7,7 @@ from web3.middleware import geth_poa_middleware
 from dotenv import load_dotenv
 from database import init_db, get_session, Alert, GlobalSettings
 from notifications import send_telegram_alert
+from polymarket import fetch_markets, fetch_trades_graphql
 
 # Load environment variables
 load_dotenv()
@@ -21,7 +20,38 @@ POLYGON_RPC_URL = os.getenv("POLYGON_RPC_URL", "https://polygon-rpc.com")
 MIN_USD_THRESHOLD = float(os.getenv("MIN_USD_THRESHOLD", 10)) 
 MAX_NONCE_THRESHOLD = int(os.getenv("MAX_NONCE_THRESHOLD", 10))
 
-# ... existing code ...
+# Logging Setup
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Initialize Web3
+try:
+    w3 = Web3(Web3.HTTPProvider(POLYGON_RPC_URL))
+    w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+    if w3.is_connected():
+        logger.info(f"Connected to Polygon RPC: {POLYGON_RPC_URL}")
+    else:
+        logger.error(f"Failed to connect to Polygon RPC: {POLYGON_RPC_URL}")
+except Exception as e:
+    logger.error(f"Error initializing Web3: {e}")
+
+# Database Initialization
+init_db()
+
+def get_nonce(wallet_address):
+    """Fetch transaction count (nonce) for a wallet."""
+    try:
+        if not wallet_address:
+            return None
+        checksum_address = Web3.to_checksum_address(wallet_address)
+        nonce = w3.eth.get_transaction_count(checksum_address)
+        return nonce
+    except Exception as e:
+        logger.error(f"Error fetching nonce for {wallet_address}: {e}")
+        return None
 
 def main():
     logger.info("Starting Polymarket Public Monitor (Read-Only)...")
@@ -52,24 +82,13 @@ def main():
             logger.info(f"Scanning {len(markets)} active markets...")
             
             for market in markets:
-                # Use conditionId which works with The Graph's "market" field
-                # Fallback to clobTokenIds parsing if conditionId is missing
+                # 1. Try Condition ID (Graph Standard)
                 market_id = market.get("conditionId")
                 
-                if not market_id:
-                    # Legacy/Backup: Handle clobTokenIds
-                    raw_clob_ids = market.get("clobTokenIds")
-                    if isinstance(raw_clob_ids, str):
-                        try:
-                            clob_ids = json.loads(raw_clob_ids)
-                        except:
-                            clob_ids = []
-                    elif isinstance(raw_clob_ids, list):
-                        clob_ids = raw_clob_ids
-                    else:
-                        clob_ids = []
-                    
-                    market_id = clob_ids[0] if clob_ids else None
+                # 2. Fallback to CLOB Token ID (if Condition ID missing)
+                # Note: clobTokenIds is already a list thanks to polymarket.py
+                if not market_id and market.get("clobTokenIds"):
+                     market_id = market.get("clobTokenIds")[0]
 
                 market_slug = market.get("slug", "unknown")
                 market_name = market.get("question", "Unknown Market")
