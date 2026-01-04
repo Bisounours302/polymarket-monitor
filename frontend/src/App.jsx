@@ -362,9 +362,9 @@ function App() {
                                     <Search className="w-5 h-5 text-gray-400" /> Live Inspector
                                 </h2>
                                 <span className={clsx("text-xs px-2 py-1 rounded-full border",
-                                    debugData?.source === "cache" ? "border-green-500/30 text-green-400 bg-green-500/10" : "border-yellow-500/30 text-yellow-400 bg-yellow-500/10"
+                                    debugData?.content?.source === "cache" ? "border-green-500/30 text-green-400 bg-green-500/10" : "border-yellow-500/30 text-yellow-400 bg-yellow-500/10"
                                 )}>
-                                    {debugData?.source === "cache" ? "● Real-Time Cache" : "○ Live Fetch"}
+                                    {debugData?.content?.source === "cache" ? "● Real-Time Cache" : "○ Live Fetch"}
                                 </span>
                             </div>
 
@@ -408,7 +408,7 @@ function App() {
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                         {/* Smart Cards */}
-                                        {debugData?.data?.map((market, idx) => (
+                                        {debugData?.content?.data?.map((market, idx) => (
                                             <div key={idx} className="bg-white/5 hover:bg-white/10 p-4 rounded-lg border border-white/5 transition-all text-sm space-y-2">
                                                 <div className="flex justify-between items-start gap-2">
                                                     <h4 className="font-medium text-white line-clamp-2">{market.question}</h4>
@@ -440,7 +440,7 @@ function App() {
                                                 </div>
                                             </div>
                                         ))}
-                                        {!debugData?.data && <div className="text-gray-500 p-4 col-span-full text-center">No cached data found. Worker might be starting...</div>}
+                                        {!debugData?.content?.data && <div className="text-gray-500 p-4 col-span-full text-center">No cached data found. Worker might be starting...</div>}
                                     </div>
                                 )}
                             </div>
@@ -448,8 +448,8 @@ function App() {
 
                         {/* Footer Info */}
                         <div className="flex justify-between text-xs text-gray-500 px-2">
-                            <p>Data Source: {debugData?.source === "cache" ? "Worker File System (data/debug_markets.json)" : "Live API Fallback"}</p>
-                            <p>Items: {debugData?.count || 0}</p>
+                            <p>Data Source: {debugData?.content?.source === "cache" ? "Worker File System (data/debug_markets.json)" : "Live API Fallback"}</p>
+                            <p>Items: {debugData?.content?.count || 0}</p>
                         </div>
                     </div>
                 </div>
