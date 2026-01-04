@@ -137,3 +137,29 @@ if not df.empty:
     
 else:
     st.info("No data detected yet. Worker is scanning...")
+
+# API Inspector Section
+st.markdown("---")
+with st.expander("🛠️ API Debug Inspector (Raw Data)"):
+    st.write("Check what the bot sees directly from the APIs.")
+    
+    if st.button("Fetch Active Markets (Gamma API)"):
+        with st.spinner("Fetching markets..."):
+            try:
+                # Import here to avoid circular or startup issues
+                from monitor import fetch_markets, fetch_trades_graphql
+                
+                markets = fetch_markets()
+                st.write(f"Found {len(markets)} active markets.")
+                st.dataframe(pd.DataFrame(markets)[['slug', 'question', 'volume', 'clobTokenIds']])
+                
+                if markets:
+                    sample_market = markets[0]
+                    clob_id = sample_market.get("clobTokenIds", [None])[0]
+                    st.write(f"Testing Trades for Top Market: **{sample_market['question']}**")
+                    trades = fetch_trades_graphql(clob_id)
+                    st.write(f"Found {len(trades)} recent trades (The Graph).")
+                    st.json(trades)
+                    
+            except Exception as e:
+                st.error(f"Error fetching API: {e}")
