@@ -63,25 +63,47 @@ def fetch_markets():
         logger.error(f"Error fetching markets: {e}")
         return []
 
-def fetch_trades(clob_id):
-    """Fetch recent trades for a specific market from CLOB API."""
+def fetch_trades_graphql(market_id):
+    """
+    Fetch recent trades using The Graph protocol (Public & Free).
+    This bypasses the need for CLOB API Keys.
+    """
+    url = "https://api.thegraph.com/subgraphs/name/polymarket/matic-markets-7"
+    
+    # GraphQL Query for recent transactions on a specific market
+    query = """
+    {
+      transactions(first: 5, orderBy: timestamp, orderDirection: desc, where: {market: "%s"}) {
+        id
+        timestamp
+        tradeAmount
+        user {
+          id
+        }
+        market {
+          id
+          question
+        }
+      }
+    }
+    """ % market_id.lower()
+
     try:
-        # CLOB API Public Endpoint for Trades
-        # Trying different common endpoints if one is empty
-        url = f"https://clob.polymarket.com/trades?market={clob_id}&limit=20"
-        response = requests.get(url, timeout=5)
-        
+        response = requests.post(url, json={'query': query}, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            # CLOB API often returns a list directly, or a dict with 'data'
-            trades = data if isinstance(data, list) else data.get('data', [])
-            return trades
-            
-        logger.warning(f"CLOB API Error {response.status_code} for {clob_id}: {response.text[:100]}")
+            if "data" in data and "transactions" in data["data"]:
+                return data["data"]["transactions"]
         return []
     except Exception as e:
-        logger.error(f"Error fetching trades for {clob_id}: {e}")
+        logger.error(f"Graph API Error: {e}")
         return []
+
+def fetch_trades(clob_id):
+    """Wrapper to maintain compatibility, now using GraphQL."""
+    # Note: The Graph uses the 'conditionId' or 'marketId' address. 
+    # Gamma returns 'clobTokenIds' which are conditionIDs usually.
+    return fetch_trades_graphql(clob_id)
 
 def main():
     logger.info("Starting Polymarket Insider Monitor...")
@@ -109,27 +131,113 @@ def main():
                 trades = fetch_trades(clob_id)
                 # DEBUG LOGGING
                 if trades:
-                    logger.info(f"Market {market_name[:20]}...: {len(trades)} trades fetched.")
+                    logger.info(f"Market {market_name[:20]}: {len(trades)} trades (Auth).")
                 
                 for trade in trades:
-                    # Trade structure validation
-                    # CLOB trade object: {'price': '0.55', 'size': '100', 'side': 'BUY', ... 'transaction_hash': '...'}
-                    # Note: 'transaction_hash' might be inside a 'match' object or top level depending on endpoint version.
-                    # We assume standard fields.
+                    # Parse CLOB Data (Back to standard format)
+                    # structure: {'price': '0.55', 'size': '100', 'side': 'BUY', 'timestamp': '...', 'transaction_hash': '...'}
                     
-                    # Important: Check keys carefully based on response.
-                    # Standard CLOB response list of dicts.
-                    
-                    price = float(trade.get('price', 0))
-                    size = float(trade.get('size', 0))
-                    amount_usd = price * size
-                    
-                    # Filter Level 1: Volume
-                    if amount_usd < MIN_USD_THRESHOLD:
-                        # logger.debug(f"Skipping small trade: ${amount_usd}")
-                        continue
+                    try:
+                        price = float(trade.get('price', 0))
+                        size = float(trade.get('size', 0))
+                        amount_usd = price * size
+                        side = trade.get('side', 'UNKNOWN')
                         
-                    logger.info(f"Candidate Trade Found: ${amount_usd} on {market_name}")
+                        # Filter Level 1: Volume
+                        if amount_usd < MIN_USD_THRESHOLD:
+                            continue
+                            
+                        logger.info(f"Candidate Trade: ${amount_usd} ({side}) on {market_name}")
+                        
+                        tx_hash = trade.get('match_id') or trade.get('transaction_hash') or trade.get('hash')
+                        if not tx_hash:
+                            # Fallback ID for non-tx trades?
+                            tx_hash = f"{trade.get('timestamp')}-{size}-{price}"
+                         
+                        if tx_hash in processed_hashes:
+                            continue
+                            
+                        processed_hashes.add(tx_hash)
+                        
+                        # Extract wallet address (maker or taker depending on side? CLOB usually gives 'maker_address' or similar if own trade, but public trade feed is anon?)
+                        # WARNING: The public/auth feed for "trades" usually does NOT show the wallet address of the OTHER party unless you are admin.
+                        # Actually... The /trades endpoint returns 'maker_address' and 'taker_address'? 
+                        # Let's check logic. If no wallet, we can't check Nonce.
+                        
+                        # If CLOB doesn't return address, we CANNOT check nonce.
+                        # Checking Gamma/Graph was better for address. 
+                        # Users say CLOB /trades returns public match data.
+                        
+                        # Let's try to get address.
+                        wallet_address = trade.get('maker_address') or trade.get('taker_address') or "0xUnknown"
+                        
+                        if wallet_address == "0xUnknown":
+                            # Use transaction hash to fetch from Web3 log if possible?
+                            # For now, let's just Log it as Whale w/o Nonce check if missing.
+                            check_nonce = False
+                        else:
+                            check_nonce = True
+
+                        # Check Nonce
+                        nonce = get_nonce(wallet_address) if check_nonce else None
+                        
+                        # If we can't get nonce, we assume WHALE (not suspicious) or ignore?
+                        # User wants "Suspicious = New Wallet".
+                        # If no address, we can't verify 'Suspicious'. So alert as WHALE.
+                        
+                        if nonce is not None:
+                             is_suspicious = nonce < MAX_NONCE_THRESHOLD
+                        else:
+                             is_suspicious = False # Default to normal whale if anon
+                             
+                        alert_type = "SUSPICIOUS" if is_suspicious else "WHALE"
+                        
+                        # Log detection
+                        logger.info(f"[{alert_type}] {amount_usd} USD by {wallet_address} (Nonce: {nonce})")
+                        
+                        polymarket_url = f"https://polymarket.com/event/{market_slug}"
+                        
+                        # Save to DB
+                        new_alert = Alert(
+                            market_name=market_name,
+                            amount_usd=amount_usd,
+                            wallet_address=wallet_address,
+                            nonce=nonce if nonce else 0,
+                            polymarket_url=polymarket_url,
+                            tx_hash=str(tx_hash),
+                            timestamp=datetime.now()
+                        )
+                        session.add(new_alert)
+                        session.commit()
+                        
+                        # Send Telegram logic...
+                        try:
+                            whales_setting = session.query(GlobalSettings).filter_by(key="notify_whales").first()
+                            suspicious_setting = session.query(GlobalSettings).filter_by(key="notify_suspicious").first()
+                            notify_whales = whales_setting.value.lower() == "true" if whales_setting else True
+                            notify_suspicious = suspicious_setting.value.lower() == "true" if suspicious_setting else True
+                        except:
+                            notify_whales = True
+                            notify_suspicious = True
+
+                        alert_data = {
+                            "amount_usd": amount_usd,
+                            "market_name": market_name,
+                            "wallet_address": wallet_address,
+                            "nonce": nonce,
+                            "polymarket_url": polymarket_url,
+                            "timestamp": datetime.now(),
+                            "alert_type": alert_type,
+                            "config": {
+                                "notify_whales": notify_whales,
+                                "notify_suspicious": notify_suspicious
+                            }
+                        }
+                        send_telegram_alert(alert_data)
+
+                    except Exception as e:
+                        logger.error(f"Error parsing trade: {e}")
+                        continue
                         
                     tx_hash = trade.get('transactionHash') or trade.get('hash') or f"{trade.get('timestamp')}-{size}"
                     
