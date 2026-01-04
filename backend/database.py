@@ -7,7 +7,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Use a persistent volume path for Docker, or local for development
+# Use a persistent volume path for Docker, or local for development
 DB_PATH = os.getenv("DB_PATH", "sqlite:///alerts.db")
+
+# Ensure directory exists if DB_PATH is a file path
+if "sqlite:///" in DB_PATH:
+    path = DB_PATH.replace("sqlite:///", "")
+    # Handle absolute paths correctly in Docker (starts with /)
+    if not path.startswith("/"):
+        path = os.path.abspath(path)
+    
+    os.makedirs(os.path.dirname(path), exist_ok=True)
 
 Base = declarative_base()
 
