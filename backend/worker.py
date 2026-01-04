@@ -52,28 +52,33 @@ def main():
             logger.info(f"Scanning {len(markets)} active markets...")
             
             for market in markets:
-                # Handle clobTokenIds which can be a list or a stringified JSON list
-                raw_clob_ids = market.get("clobTokenIds")
-                if isinstance(raw_clob_ids, str):
-                    try:
-                        clob_ids = json.loads(raw_clob_ids)
-                    except:
-                        clob_ids = []
-                elif isinstance(raw_clob_ids, list):
-                    clob_ids = raw_clob_ids
-                else:
-                    clob_ids = []
-
-                clob_id = clob_ids[0] if clob_ids else None
+                # Use conditionId which works with The Graph's "market" field
+                # Fallback to clobTokenIds parsing if conditionId is missing
+                market_id = market.get("conditionId")
                 
+                if not market_id:
+                    # Legacy/Backup: Handle clobTokenIds
+                    raw_clob_ids = market.get("clobTokenIds")
+                    if isinstance(raw_clob_ids, str):
+                        try:
+                            clob_ids = json.loads(raw_clob_ids)
+                        except:
+                            clob_ids = []
+                    elif isinstance(raw_clob_ids, list):
+                        clob_ids = raw_clob_ids
+                    else:
+                        clob_ids = []
+                    
+                    market_id = clob_ids[0] if clob_ids else None
+
                 market_slug = market.get("slug", "unknown")
                 market_name = market.get("question", "Unknown Market")
                 
-                if not clob_id:
+                if not market_id:
                     continue
                 
                 # Fetch trades from The Graph
-                trades = fetch_trades_graphql(clob_id)
+                trades = fetch_trades_graphql(market_id)
                 
                 if trades:
                     logger.debug(f"Market {market_name[:20]}: {len(trades)} trades fetched.")
