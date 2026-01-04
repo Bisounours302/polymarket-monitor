@@ -13,17 +13,27 @@ import clsx from "clsx";
 
 const API_URL = import.meta.env.VITE_API_URL || "/api";
 
-
 const fetcher = (url) => fetch(url).then((res) => res.json());
 
 function App() {
-    const { data: alerts, mutate: refreshAlerts } = useSWR(`${API_URL}/alerts?limit=50`, fetcher, { refreshInterval: 5000 });
+    const { data: alerts } = useSWR(`${API_URL}/alerts?limit=50`, fetcher, { refreshInterval: 5000 });
     const { data: stats } = useSWR(`${API_URL}/stats`, fetcher, { refreshInterval: 10000 });
+
+    // UI State
     const [filterMode, setFilterMode] = useState("ALL"); // ALL | SUSPICIOUS
     const [showSettings, setShowSettings] = useState(false);
+    const [showDebug, setShowDebug] = useState(false);
 
     // Settings State
-    const [settings, setSettings] = useState({ notify_whales: true, notify_suspicious: true });
+    const [settings, setSettings] = useState({
+        notify_whales: true,
+        notify_suspicious: true,
+        system_active: true
+    });
+
+    // Debug State
+    const [debugData, setDebugData] = useState(null);
+    const [debugLoading, setDebugLoading] = useState(false);
 
     // Load Settings
     useEffect(() => {
@@ -33,18 +43,58 @@ function App() {
             .catch(err => console.error("Failed to load settings", err));
     }, []);
 
-    const saveSettings = async () => {
+    // Save Settings
+    const saveSettings = async (newSettingsOverride) => {
+        const toSave = newSettingsOverride || settings;
         try {
             await fetch(`${API_URL}/settings`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(settings)
+                body: JSON.stringify(toSave)
             });
-            setShowSettings(false);
+            setSettings(toSave);
+            if (!newSettingsOverride) setShowSettings(false);
         } catch (err) {
             console.error("Failed to save settings", err);
         }
     }
+
+    const toggleSystem = () => {
+        const newSettings = { ...settings, system_active: !settings.system_active };
+        saveSettings(newSettings);
+    };
+
+    const fetchDebugMarkets = async () => {
+        setDebugLoading(true);
+        try {
+            const res = await fetch(`${API_URL}/debug/markets`);
+            const data = await res.json();
+            setDebugData({ type: "markets", content: data });
+        } catch (e) {
+            setDebugData({ type: "error", content: String(e) });
+        }
+        setDebugLoading(false);
+    };
+
+    const fetchDebugTrades = async () => {
+        setDebugLoading(true);
+        try {
+            // Fetch top market first to get ID
+            const mRes = await fetch(`${API_URL}/debug/markets`);
+            const mData = await mRes.json();
+            if (mData.data && mData.data.length > 0) {
+                const clobId = mData.data[0].clobTokenIds[0];
+                const tRes = await fetch(`${API_URL}/debug/trades?market_id=${clobId}`);
+                const tData = await tRes.json();
+                setDebugData({ type: "trades", content: tData });
+            } else {
+                setDebugData({ type: "error", content: "No active markets found to test trades." });
+            }
+        } catch (e) {
+            setDebugData({ type: "error", content: String(e) });
+        }
+        setDebugLoading(false);
+    };
 
     const filteredAlerts = alerts?.filter(a => {
         if (filterMode === "SUSPICIOUS") return a.nonce < 10;
@@ -69,8 +119,8 @@ function App() {
                                 Polymarket Monitor
                             </h1>
                             <div className="flex items-center gap-2 text-sm text-gray-400">
-                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                                System Operational
+                                <span className={clsx("w-2 h-2 rounded-full animate-pulse", settings.system_active ? "bg-green-500" : "bg-red-500")} />
+                                {settings.system_active ? "System Operational" : "System Paused"}
                             </div>
                         </div>
                     </div>
@@ -87,6 +137,27 @@ function App() {
                                 <p className="font-mono text-lg font-bold text-accent">{stats?.total_alerts || "..."}</p>
                             </div>
                         </div>
+
+                        {/* System Toggle */}
+                        <button
+                            onClick={toggleSystem}
+                            className={clsx(
+                                "px-4 py-2 rounded-lg font-bold text-sm transition-all border",
+                                settings.system_active
+                                    ? "bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20"
+                                    : "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20"
+                            )}
+                        >
+                            {settings.system_active ? "ON" : "OFF"}
+                        </button>
+
+                        <button
+                            onClick={() => setShowDebug(true)}
+                            className="p-3 hover:bg-white/5 rounded-lg transition-colors text-gray-400 hover:text-white"
+                            title="API Inspector"
+                        >
+                            <Search className="w-6 h-6" />
+                        </button>
 
                         <button
                             onClick={() => setShowSettings(true)}
@@ -130,8 +201,8 @@ function App() {
 
                         <div className="glass-panel p-6 text-center">
                             <p className="text-xs text-gray-500 mb-2">SCANNING</p>
-                            <div className="text-3xl font-mono animate-pulse text-primary">
-                                LIVE
+                            <div className={clsx("text-3xl font-mono", settings.system_active ? "animate-pulse text-primary" : "text-gray-600")}>
+                                {settings.system_active ? "LIVE" : "PAUSED"}
                             </div>
                         </div>
                     </div>
@@ -255,11 +326,55 @@ function App() {
                                 Cancel
                             </button>
                             <button
-                                onClick={saveSettings}
+                                onClick={() => saveSettings()}
                                 className="px-4 py-2 text-sm bg-primary hover:bg-blue-600 text-white rounded-lg font-medium transition-colors shadow-lg shadow-blue-500/20"
                             >
                                 Save Configuration
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* API Inspector Modal */}
+            {showDebug && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="glass-panel w-full max-w-4xl p-6 space-y-6 animate-in zoom-in-95 duration-200 h-[80vh] flex flex-col">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                <Search className="w-5 h-5 text-gray-400" /> API Inspector
+                            </h2>
+                            <button onClick={() => setShowDebug(false)} className="text-gray-400 hover:text-white">✕</button>
+                        </div>
+
+                        <div className="flex gap-4">
+                            <button
+                                onClick={fetchDebugMarkets}
+                                disabled={debugLoading}
+                                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                            >
+                                Fetch Gamma Markets (Top 100)
+                            </button>
+                            <button
+                                onClick={fetchDebugTrades}
+                                disabled={debugLoading}
+                                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                            >
+                                Fetch The Graph Trades (Top Market)
+                            </button>
+                        </div>
+
+                        <div className="flex-1 bg-black/50 rounded-lg p-4 overflow-auto font-mono text-xs text-green-400 border border-white/5">
+                            {debugLoading ? (
+                                <div className="flex items-center gap-2 text-gray-400">
+                                    <span className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                                    Fetching live data...
+                                </div>
+                            ) : debugData ? (
+                                <pre>{JSON.stringify(debugData, null, 2)}</pre>
+                            ) : (
+                                <div className="text-gray-500">Select an endpoint to inspect raw API responses.</div>
+                            )}
                         </div>
                     </div>
                 </div>
