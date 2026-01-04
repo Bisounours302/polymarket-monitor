@@ -88,6 +88,9 @@ def main():
             session = get_session()
             markets = fetch_markets()
             
+            # DEBUG LOGGING
+            logger.info(f"Fetched {len(markets)} markets from Gamma.")
+            
             for market in markets:
                 clob_id = market.get("clobTokenIds", [None])[0]
                 market_slug = market.get("slug", "unknown")
@@ -97,6 +100,9 @@ def main():
                     continue
                 
                 trades = fetch_trades(clob_id)
+                # DEBUG LOGGING
+                if trades:
+                    logger.info(f"Market {market_name[:20]}...: {len(trades)} trades fetched.")
                 
                 for trade in trades:
                     # Trade structure validation
@@ -113,7 +119,10 @@ def main():
                     
                     # Filter Level 1: Volume
                     if amount_usd < MIN_USD_THRESHOLD:
+                        # logger.debug(f"Skipping small trade: ${amount_usd}")
                         continue
+                        
+                    logger.info(f"Candidate Trade Found: ${amount_usd} on {market_name}")
                         
                     tx_hash = trade.get('transactionHash') or trade.get('hash') or f"{trade.get('timestamp')}-{size}"
                     
