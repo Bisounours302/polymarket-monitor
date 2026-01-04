@@ -350,6 +350,44 @@ function App() {
                 </div>
             )}
 
+            {/* Auto-Refresh Logic for Debug Inspector */}
+            const [refreshTimer, setRefreshTimer] = useState(5);
+
+            useEffect(() => {
+                if (!showDebug) return; // Only run when debug modal is open
+
+                const fetchData = async () => {
+                    try {
+                        if (debugViewMode === "SMART" || debugViewMode === "RAW") {
+                            const res = await fetch(`${API_URL}/debug/markets`);
+            const data = await res.json();
+            setDebugData({type: "markets", content: data });
+                        } else if (debugViewMode === "SCANNER") {
+                            const res = await fetch(`${API_URL}/debug/feed`);
+            const data = await res.json();
+            setDebugData({type: "scanner", content: data });
+                        }
+                    } catch (e) {
+                console.error("Auto-fetch error:", e);
+                    }
+                };
+
+            // Initial Fetch when modal opens or mode changes
+            fetchData();
+
+                const interval = setInterval(() => {
+                setRefreshTimer((prev) => {
+                    if (prev <= 1) { // When timer hits 0 or 1, fetch and reset
+                        fetchData();
+                        return 5; // Reset to 5 seconds
+                    }
+                    return prev - 1;
+                });
+                }, 1000); // Update every second
+
+                return () => clearInterval(interval); // Cleanup on unmount or dependency change
+            }, [showDebug, debugViewMode]); // Dependencies: re-run effect if these change
+
             {/* API Inspector Modal */}
             {showDebug && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -370,12 +408,17 @@ function App() {
                                     <button
                                         onClick={() => {
                                             setDebugViewMode("SCANNER");
-                                            fetch(`${API_URL}/debug/feed`).then(r => r.json()).then(d => setDebugData({ type: "scanner", content: d }));
                                         }}
                                         className={clsx("px-3 py-1 text-xs rounded-lg transition-colors", debugViewMode === "SCANNER" ? "bg-primary text-white" : "hover:bg-white/10 text-gray-400")}
                                     >
                                         Live Scanner ({debugData?.type === "scanner" ? debugData?.content?.count : 0})
                                     </button>
+                                </div>
+
+                                {/* Timer Badge */}
+                                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/5 text-xs font-mono text-gray-400">
+                                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                    Auto-refresh: {refreshTimer}s
                                 </div>
                             </div>
 
