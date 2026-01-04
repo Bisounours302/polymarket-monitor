@@ -410,8 +410,8 @@ function App() {
                                             {debugData?.content?.data?.map((item, i) => (
                                                 <tr key={i} className="hover:bg-white/5">
                                                     <td className="p-2 text-gray-500">{item.time}</td>
-                                                    <td className={clsx("p-2 font-bold", item.status.includes("Ignored") ? "text-gray-600" : "text-green-400")}>
-                                                        {item.status}
+                                                    <td className={clsx("p-2 font-bold", (item.status || "").includes("Ignored") ? "text-gray-600" : "text-green-400")}>
+                                                        {item.status || "Unknown"}
                                                     </td>
                                                     <td className="p-2">${item.amount}</td>
                                                     <td className="p-2 truncate max-w-[200px]" title={item.market}>{item.market}</td>
