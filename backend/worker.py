@@ -82,13 +82,29 @@ def main():
             logger.info(f"Scanning {len(markets)} active markets...")
             
             for market in markets:
-                # 1. Try Condition ID (Graph Standard)
-                market_id = market.get("conditionId")
+                # STRATEGY CHANGE: Use Hex(ClobTokenID) 
+                # Condition ID proved unreliable for Graph queries on this subgraph.
+                # We prioritize the first Token ID converted to Hex.
                 
-                # 2. Fallback to CLOB Token ID (if Condition ID missing)
-                # Note: clobTokenIds is already a list thanks to polymarket.py
-                if not market_id and market.get("clobTokenIds"):
-                     market_id = market.get("clobTokenIds")[0]
+                market_id = None
+                clob_ids = market.get("clobTokenIds", [])
+                
+                if clob_ids and len(clob_ids) > 0:
+                    try:
+                        # Convert Decimal String -> Int -> Hex String
+                        # e.g. "9359..." -> 0x19ee...
+                        first_id = clob_ids[0]
+                        if isinstance(first_id, str):
+                           id_val = int(first_id)
+                        else:
+                           id_val = int(first_id)
+                           
+                        market_id = hex(id_val)
+                    except Exception as e:
+                        logger.warning(f"Failed to convert token ID to hex: {e}")
+                        market_id = market.get("conditionId")
+                else:
+                    market_id = market.get("conditionId")
 
                 market_slug = market.get("slug", "unknown")
                 market_name = market.get("question", "Unknown Market")
