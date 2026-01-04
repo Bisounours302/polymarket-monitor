@@ -67,10 +67,17 @@ def fetch_trades(clob_id):
     """Fetch recent trades for a specific market from CLOB API."""
     try:
         # CLOB API Public Endpoint for Trades
-        url = f"https://clob.polymarket.com/trades?market={clob_id}&limit=10"
+        # Trying different common endpoints if one is empty
+        url = f"https://clob.polymarket.com/trades?market={clob_id}&limit=20"
         response = requests.get(url, timeout=5)
+        
         if response.status_code == 200:
-            return response.json()
+            data = response.json()
+            # CLOB API often returns a list directly, or a dict with 'data'
+            trades = data if isinstance(data, list) else data.get('data', [])
+            return trades
+            
+        logger.warning(f"CLOB API Error {response.status_code} for {clob_id}: {response.text[:100]}")
         return []
     except Exception as e:
         logger.error(f"Error fetching trades for {clob_id}: {e}")
