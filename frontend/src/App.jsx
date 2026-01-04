@@ -355,38 +355,31 @@ function App() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                     <div className="glass-panel w-full max-w-5xl p-6 space-y-4 animate-in zoom-in-95 duration-200 h-[85vh] flex flex-col">
 
-                        {/* Header & Controls */}
                         <div className="flex justify-between items-center pb-4 border-b border-white/10">
                             <div className="flex items-center gap-4">
                                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                                     <Search className="w-5 h-5 text-gray-400" /> Live Inspector
                                 </h2>
-                                <span className={clsx("text-xs px-2 py-1 rounded-full border",
-                                    debugData?.content?.source === "cache" ? "border-green-500/30 text-green-400 bg-green-500/10" : "border-yellow-500/30 text-yellow-400 bg-yellow-500/10"
-                                )}>
-                                    {debugData?.content?.source === "cache" ? "● Real-Time Cache" : "○ Live Fetch"}
-                                </span>
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                                {/* Toggle View */}
-                                <div className="bg-black/40 p-1 rounded-lg flex text-xs font-medium">
+                                <div className="flex gap-2">
                                     <button
                                         onClick={() => setDebugViewMode("SMART")}
-                                        className={clsx("px-3 py-1.5 rounded-md transition-all", debugViewMode === "SMART" ? "bg-primary text-white shadow-lg" : "text-gray-400 hover:text-white")}
+                                        className={clsx("px-3 py-1 text-xs rounded-lg transition-colors", debugViewMode === "SMART" || debugViewMode === "RAW" ? "bg-primary text-white" : "hover:bg-white/10 text-gray-400")}
                                     >
-                                        Smart View
+                                        Markets Cache
                                     </button>
                                     <button
-                                        onClick={() => setDebugViewMode("RAW")}
-                                        className={clsx("px-3 py-1.5 rounded-md transition-all", debugViewMode === "RAW" ? "bg-primary text-white shadow-lg" : "text-gray-400 hover:text-white")}
+                                        onClick={() => {
+                                            setDebugViewMode("SCANNER");
+                                            fetch(`${API_URL}/debug/feed`).then(r => r.json()).then(d => setDebugData({ type: "scanner", content: d }));
+                                        }}
+                                        className={clsx("px-3 py-1 text-xs rounded-lg transition-colors", debugViewMode === "SCANNER" ? "bg-primary text-white" : "hover:bg-white/10 text-gray-400")}
                                     >
-                                        Raw JSON
+                                        Live Scanner ({debugData?.type === "scanner" ? debugData?.content?.count : 0})
                                     </button>
                                 </div>
-
-                                <button onClick={() => setShowDebug(false)} className="bg-white/5 hover:bg-white/10 p-2 rounded-lg text-gray-400 transition-colors">✕</button>
                             </div>
+
+                            <button onClick={() => setShowDebug(false)} className="bg-white/5 hover:bg-white/10 p-2 rounded-lg text-gray-400 transition-colors">✕</button>
                         </div>
 
                         {/* Content Area */}
@@ -401,47 +394,76 @@ function App() {
                             )}
 
                             <div className="h-full overflow-auto p-4 custom-scrollbar">
-                                {debugViewMode === "RAW" ? (
-                                    <pre className="font-mono text-xs text-green-400 whitespace-pre-wrap">
-                                        {JSON.stringify(debugData, null, 2)}
-                                    </pre>
+
+                                {debugViewMode === "SCANNER" ? (
+                                    <table className="w-full text-left text-xs text-gray-400 font-mono">
+                                        <thead className="bg-white/5 sticky top-0 text-white">
+                                            <tr>
+                                                <th className="p-2">Time</th>
+                                                <th className="p-2">Status</th>
+                                                <th className="p-2">Amount</th>
+                                                <th className="p-2">Market</th>
+                                                <th className="p-2">Wallet</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/5">
+                                            {debugData?.content?.data?.map((item, i) => (
+                                                <tr key={i} className="hover:bg-white/5">
+                                                    <td className="p-2 text-gray-500">{item.time}</td>
+                                                    <td className={clsx("p-2 font-bold", item.status.includes("Ignored") ? "text-gray-600" : "text-green-400")}>
+                                                        {item.status}
+                                                    </td>
+                                                    <td className="p-2">${item.amount}</td>
+                                                    <td className="p-2 truncate max-w-[200px]" title={item.market}>{item.market}</td>
+                                                    <td className="p-2 truncate max-w-[100px]">{item.wallet}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {/* Smart Cards */}
-                                        {debugData?.content?.data?.map((market, idx) => (
-                                            <div key={idx} className="bg-white/5 hover:bg-white/10 p-4 rounded-lg border border-white/5 transition-all text-sm space-y-2">
-                                                <div className="flex justify-between items-start gap-2">
-                                                    <h4 className="font-medium text-white line-clamp-2">{market.question}</h4>
-                                                    <span className="text-xs bg-black/40 px-2 py-1 rounded text-gray-400 font-mono">#{idx + 1}</span>
-                                                </div>
+                                    // Existing Market Grid Logic
+                                    debugViewMode === "RAW" ? (
+                                        <pre className="font-mono text-xs text-green-400 whitespace-pre-wrap">
+                                            {JSON.stringify(debugData, null, 2)}
+                                        </pre>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                            {/* Smart Cards */}
+                                            {debugData?.content?.data?.map((market, idx) => (
+                                                <div key={idx} className="bg-white/5 hover:bg-white/10 p-4 rounded-lg border border-white/5 transition-all text-sm space-y-2">
+                                                    <div className="flex justify-between items-start gap-2">
+                                                        <h4 className="font-medium text-white line-clamp-2">{market.question}</h4>
+                                                        <span className="text-xs bg-black/40 px-2 py-1 rounded text-gray-400 font-mono">#{idx + 1}</span>
+                                                    </div>
 
-                                                <div className="grid grid-cols-2 gap-2 text-xs py-2">
-                                                    <div>
-                                                        <p className="text-gray-500">Volume</p>
-                                                        <p className="text-gray-300 font-mono">${parseInt(market.volume || 0).toLocaleString()}</p>
+                                                    <div className="grid grid-cols-2 gap-2 text-xs py-2">
+                                                        <div>
+                                                            <p className="text-gray-500">Volume</p>
+                                                            <p className="text-gray-300 font-mono">${parseInt(market.volume || 0).toLocaleString()}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-gray-500">Active</p>
+                                                            <p className={clsx("font-bold", market.active ? "text-green-400" : "text-red-400")}>
+                                                                {market.active ? "YES" : "NO"}
+                                                            </p>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p className="text-gray-500">Active</p>
-                                                        <p className={clsx("font-bold", market.active ? "text-green-400" : "text-red-400")}>
-                                                            {market.active ? "YES" : "NO"}
-                                                        </p>
-                                                    </div>
-                                                </div>
 
-                                                <div className="space-y-1 bg-black/20 p-2 rounded text-xs font-mono break-all">
-                                                    <div className="flex gap-2">
-                                                        <span className="text-gray-500 w-8">CID:</span>
-                                                        <span className="text-blue-300 truncate">{market.conditionId}</span>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        <span className="text-gray-500 w-8">TOK:</span>
-                                                        <span className="text-purple-300 truncate">{market.clobTokenIds?.[0]}</span>
+                                                    <div className="space-y-1 bg-black/20 p-2 rounded text-xs font-mono break-all">
+                                                        <div className="flex gap-2">
+                                                            <span className="text-gray-500 w-8">CID:</span>
+                                                            <span className="text-blue-300 truncate">{market.conditionId}</span>
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <span className="text-gray-500 w-8">TOK:</span>
+                                                            <span className="text-purple-300 truncate">{market.clobTokenIds?.[0]}</span>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
-                                        {!debugData?.content?.data && <div className="text-gray-500 p-4 col-span-full text-center">No cached data found. Worker might be starting...</div>}
-                                    </div>
+                                            ))}
+                                            {!debugData?.content?.data && <div className="text-gray-500 p-4 col-span-full text-center">No cached data found. Worker might be starting...</div>}
+                                        </div>
+                                    )
                                 )}
                             </div>
                         </div>

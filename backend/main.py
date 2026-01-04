@@ -139,11 +139,20 @@ def debug_markets():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/debug/trades")
-def debug_trades(market_id: str):
-    from polymarket import fetch_trades
+@app.get("/debug/feed")
+def debug_feed():
+    import json
+    import os
     try:
-        data = fetch_trades(market_id)
-        return {"count": len(data), "data": data}
+        feed_path = "/app/data/live_feed.json"
+        if not os.path.exists(feed_path):
+            feed_path = "data/live_feed.json"
+            
+        if os.path.exists(feed_path):
+            with open(feed_path, "r") as f:
+                data = json.load(f)
+            return {"count": len(data), "data": data}
+        return {"count": 0, "data": []}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Don't crash if file read conflicts, just return empty
+        return {"count": 0, "data": [], "error": str(e)}

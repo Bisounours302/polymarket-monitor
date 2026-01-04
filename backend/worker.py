@@ -100,7 +100,21 @@ def main():
     logger.info("Starting Polymarket Public Monitor (Read-Only)...")
     
     processed_hashes = set()
+    recent_scanned_trades = deque(maxlen=100)
     
+    def save_live_feed():
+        try:
+            feed_path = "/app/data/live_feed.json"
+            if not os.path.exists("/app/data"):
+                feed_path = "data/live_feed.json"
+            
+            temp_path = feed_path + ".tmp"
+            with open(temp_path, "w") as f:
+                json.dump(list(recent_scanned_trades), f, default=str)
+            os.replace(temp_path, feed_path)
+        except Exception as e:
+            logger.error(f"Feed save error: {e}")
+
     while True:
         try:
             session = get_session()
@@ -146,27 +160,33 @@ def main():
                 # Fetch trades from Data API
                 trades = fetch_trades(market_id)
                 
-                if trades:
-                    logger.debug(f"Market {market_name[:20]}: {len(trades)} trades fetched.")
-                
-                for trade in trades:
-                    # Parse Data API Object
-                    try:
-                        # Data API format: { size, price, timestamp, proxyWallet, transactionHash ... }
                         size = float(trade.get('size', 0))
                         price = float(trade.get('price', 0))
                         amount_usd = size * price
-                        
                         timestamp = int(trade.get('timestamp', 0))
                         wallet_address = trade.get('proxyWallet') or trade.get('maker') or "unknown"
                         tx_id = trade.get('transactionHash') or f"{market_id}-{timestamp}"
                         
+                        trade_record = {
+                            "time": datetime.fromtimestamp(timestamp).strftime("%H:%M:%S"),
+                            "market": market_name[:40],
+                            "amount": round(amount_usd, 2),
+                            "wallet": wallet_address,
+                            "status": "Scanning..."
+                        }
+
                         # Filter by Volume
                         if amount_usd < MIN_USD_THRESHOLD:
+                            trade_record["status"] = f"Ignored (<${int(MIN_USD_THRESHOLD)})"
+                            recent_scanned_trades.appendleft(trade_record)
                             continue
                         
                         # Deduplication
                         if tx_id in processed_hashes:
+                            # Do not log duplicates to feed to avoid spamming same tx
+                            # or log as "Seen"
+                            # trade_record["status"] = "Already Processed"
+                            # recent_scanned_trades.appendleft(trade_record)
                             continue
                         processed_hashes.add(tx_id)
                         
@@ -180,7 +200,9 @@ def main():
                             is_suspicious = nonce < MAX_NONCE_THRESHOLD
                         
                         alert_type = "SUSPICIOUS" if is_suspicious else "WHALE"
-                        
+                        trade_record["status"] = f"🚨 {alert_type} ALERT"
+                        recent_scanned_trades.appendleft(trade_record)
+
                         polymarket_url = f"https://polymarket.com/event/{market_slug}"
                         
                         # Save to DB
@@ -196,11 +218,12 @@ def main():
                         session.add(new_alert)
                         session.commit()
                         
-                        # Check Notification Settings
+                        # Send Notification
+                        # ... (keep existing notification logic simplified or same) ...
                         try:
+                            # Re-querying settings to be safe or use cached
                             whales_setting = session.query(GlobalSettings).filter_by(key="notify_whales").first()
                             susp_setting = session.query(GlobalSettings).filter_by(key="notify_suspicious").first()
-                            
                             notify_whales = whales_setting.value.lower() == "true" if whales_setting else True
                             notify_susp = susp_setting.value.lower() == "true" if susp_setting else True
                         except:
@@ -215,16 +238,15 @@ def main():
                             "polymarket_url": polymarket_url,
                             "timestamp": datetime.fromtimestamp(timestamp),
                             "alert_type": alert_type,
-                            "config": {
-                                "notify_whales": notify_whales,
-                                "notify_suspicious": notify_susp
-                            }
+                            "config": {"notify_whales": notify_whales, "notify_suspicious": notify_susp}
                         }
                         send_telegram_alert(alert_data)
-
                     except Exception as e:
                         logger.error(f"Error processing trade: {e}")
                         continue
+                
+                # Update Feed File after each market
+                save_live_feed()
             
             session.close()
             logger.info("Cycle complete. Sleeping for 30s...")
