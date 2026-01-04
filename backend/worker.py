@@ -79,6 +79,19 @@ def main():
 
             markets = fetch_markets()
             
+            # Save latest state for Debug Inspector
+            try:
+                debug_path = "/app/data/debug_markets.json"
+                # If running locally (not in docker), adjust path
+                if not os.path.exists("/app/data"):
+                    debug_path = "data/debug_markets.json"
+                    os.makedirs(os.path.dirname(debug_path), exist_ok=True)
+                    
+                with open(debug_path, "w") as f:
+                    json.dump(markets, f, indent=2)
+            except Exception as e:
+                logger.error(f"Failed to save debug cache: {e}")
+            
             logger.info(f"Scanning {len(markets)} active markets...")
             
             for market in markets:

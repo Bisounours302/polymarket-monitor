@@ -40,6 +40,14 @@ function App() {
     // Debug State
     const [debugData, setDebugData] = useState(null);
     const [debugLoading, setDebugLoading] = useState(false);
+    const [debugViewMode, setDebugViewMode] = useState("SMART");
+
+    // Auto-fetch debug data when modal opens
+    useEffect(() => {
+        if (showDebug) {
+            fetchDebugMarkets();
+        }
+    }, [showDebug]);
 
     // Load Settings
     useEffect(() => {
@@ -345,42 +353,103 @@ function App() {
             {/* API Inspector Modal */}
             {showDebug && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                    <div className="glass-panel w-full max-w-4xl p-6 space-y-6 animate-in zoom-in-95 duration-200 h-[80vh] flex flex-col">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                                <Search className="w-5 h-5 text-gray-400" /> API Inspector
-                            </h2>
-                            <button onClick={() => setShowDebug(false)} className="text-gray-400 hover:text-white">✕</button>
-                        </div>
+                    <div className="glass-panel w-full max-w-5xl p-6 space-y-4 animate-in zoom-in-95 duration-200 h-[85vh] flex flex-col">
 
-                        <div className="flex gap-4">
-                            <button
-                                onClick={fetchDebugMarkets}
-                                disabled={debugLoading}
-                                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                            >
-                                Fetch Gamma Markets (Top 100)
-                            </button>
-                            <button
-                                onClick={fetchDebugTrades}
-                                disabled={debugLoading}
-                                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                            >
-                                Fetch The Graph Trades (Top Market)
-                            </button>
-                        </div>
+                        {/* Header & Controls */}
+                        <div className="flex justify-between items-center pb-4 border-b border-white/10">
+                            <div className="flex items-center gap-4">
+                                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                    <Search className="w-5 h-5 text-gray-400" /> Live Inspector
+                                </h2>
+                                <span className={clsx("text-xs px-2 py-1 rounded-full border",
+                                    debugData?.source === "cache" ? "border-green-500/30 text-green-400 bg-green-500/10" : "border-yellow-500/30 text-yellow-400 bg-yellow-500/10"
+                                )}>
+                                    {debugData?.source === "cache" ? "● Real-Time Cache" : "○ Live Fetch"}
+                                </span>
+                            </div>
 
-                        <div className="flex-1 bg-black/50 rounded-lg p-4 overflow-auto font-mono text-xs text-green-400 border border-white/5">
-                            {debugLoading ? (
-                                <div className="flex items-center gap-2 text-gray-400">
-                                    <span className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                                    Fetching live data...
+                            <div className="flex items-center gap-3">
+                                {/* Toggle View */}
+                                <div className="bg-black/40 p-1 rounded-lg flex text-xs font-medium">
+                                    <button
+                                        onClick={() => setDebugViewMode("SMART")}
+                                        className={clsx("px-3 py-1.5 rounded-md transition-all", debugViewMode === "SMART" ? "bg-primary text-white shadow-lg" : "text-gray-400 hover:text-white")}
+                                    >
+                                        Smart View
+                                    </button>
+                                    <button
+                                        onClick={() => setDebugViewMode("RAW")}
+                                        className={clsx("px-3 py-1.5 rounded-md transition-all", debugViewMode === "RAW" ? "bg-primary text-white shadow-lg" : "text-gray-400 hover:text-white")}
+                                    >
+                                        Raw JSON
+                                    </button>
                                 </div>
-                            ) : debugData ? (
-                                <pre>{JSON.stringify(debugData, null, 2)}</pre>
-                            ) : (
-                                <div className="text-gray-500">Select an endpoint to inspect raw API responses.</div>
+
+                                <button onClick={() => setShowDebug(false)} className="bg-white/5 hover:bg-white/10 p-2 rounded-lg text-gray-400 transition-colors">✕</button>
+                            </div>
+                        </div>
+
+                        {/* Content Area */}
+                        <div className="flex-1 bg-black/30 rounded-lg overflow-hidden border border-white/5 relative">
+                            {debugLoading && (
+                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10 backdrop-blur-sm">
+                                    <div className="flex items-center gap-2 text-primary">
+                                        <span className="w-5 h-5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                                        Syncing with Worker...
+                                    </div>
+                                </div>
                             )}
+
+                            <div className="h-full overflow-auto p-4 custom-scrollbar">
+                                {debugViewMode === "RAW" ? (
+                                    <pre className="font-mono text-xs text-green-400 whitespace-pre-wrap">
+                                        {JSON.stringify(debugData, null, 2)}
+                                    </pre>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {/* Smart Cards */}
+                                        {debugData?.data?.map((market, idx) => (
+                                            <div key={idx} className="bg-white/5 hover:bg-white/10 p-4 rounded-lg border border-white/5 transition-all text-sm space-y-2">
+                                                <div className="flex justify-between items-start gap-2">
+                                                    <h4 className="font-medium text-white line-clamp-2">{market.question}</h4>
+                                                    <span className="text-xs bg-black/40 px-2 py-1 rounded text-gray-400 font-mono">#{idx + 1}</span>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-2 text-xs py-2">
+                                                    <div>
+                                                        <p className="text-gray-500">Volume</p>
+                                                        <p className="text-gray-300 font-mono">${parseInt(market.volume || 0).toLocaleString()}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-gray-500">Active</p>
+                                                        <p className={clsx("font-bold", market.active ? "text-green-400" : "text-red-400")}>
+                                                            {market.active ? "YES" : "NO"}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1 bg-black/20 p-2 rounded text-xs font-mono break-all">
+                                                    <div className="flex gap-2">
+                                                        <span className="text-gray-500 w-8">CID:</span>
+                                                        <span className="text-blue-300 truncate">{market.conditionId}</span>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <span className="text-gray-500 w-8">TOK:</span>
+                                                        <span className="text-purple-300 truncate">{market.clobTokenIds?.[0]}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {!debugData?.data && <div className="text-gray-500 p-4 col-span-full text-center">No cached data found. Worker might be starting...</div>}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Footer Info */}
+                        <div className="flex justify-between text-xs text-gray-500 px-2">
+                            <p>Data Source: {debugData?.source === "cache" ? "Worker File System (data/debug_markets.json)" : "Live API Fallback"}</p>
+                            <p>Items: {debugData?.count || 0}</p>
                         </div>
                     </div>
                 </div>
