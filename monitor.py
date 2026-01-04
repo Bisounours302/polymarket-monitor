@@ -55,7 +55,7 @@ def get_nonce(wallet_address):
 def fetch_markets():
     """Fetch top active markets by volume from Gamma API."""
     try:
-        url = "https://gamma-api.polymarket.com/markets?limit=20&active=true&closed=false&order=volume:desc"
+        url = "https://gamma-api.polymarket.com/markets?limit=100&active=true&closed=false&order=volume:desc"
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         return response.json()
@@ -72,7 +72,7 @@ def fetch_trades_graphql(market_id):
     
     query = """
     {
-      transactions(first: 5, orderBy: timestamp, orderDirection: desc, where: {market: "%s"}) {
+      transactions(first: 10, orderBy: timestamp, orderDirection: desc, where: {market: "%s"}) {
         id
         timestamp
         tradeAmount
