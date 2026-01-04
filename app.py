@@ -2,11 +2,10 @@ import streamlit as st
 import pandas as pd
 import time
 from sqlalchemy.orm import sessionmaker
-from database import get_engine, Alert
+from database import get_engine, Alert, GlobalSettings
 
 st.set_page_config(
-    page_title="Polymarket Insider Monitor",
-    page_icon="🕵️",
+    page_title="Polymarket Monitor",
     layout="wide"
 )
 
@@ -14,8 +13,11 @@ st.set_page_config(
 engine = get_engine()
 Session = sessionmaker(bind=engine)
 
+def get_session():
+    return Session()
+
 def load_data():
-    session = Session()
+    session = get_session()
     try:
         query = session.query(Alert).statement
         df = pd.read_sql(query, session.bind)
@@ -23,9 +25,63 @@ def load_data():
     finally:
         session.close()
 
-# Sidebar
+def load_settings():
+    session = get_session()
+    try:
+        whales = session.query(GlobalSettings).filter_by(key="notify_whales").first()
+        suspicious = session.query(GlobalSettings).filter_by(key="notify_suspicious").first()
+        return {
+            "notify_whales": whales.value == "true" if whales else True,
+            "notify_suspicious": suspicious.value == "true" if suspicious else True
+        }
+    except Exception:
+        return {"notify_whales": True, "notify_suspicious": True}
+    finally:
+        session.close()
+
+def save_setting(key, value):
+    session = get_session()
+    try:
+        setting = session.query(GlobalSettings).filter_by(key=key).first()
+        if not setting:
+            setting = GlobalSettings(key=key)
+            session.add(setting)
+        setting.value = "true" if value else "false"
+        session.commit()
+    except Exception as e:
+        st.error(f"Error saving setting: {e}")
+    finally:
+        session.close()
+
+# Sidebar: Settings & Tools
 st.sidebar.title("Configuration")
-auto_refresh = st.sidebar.checkbox("Auto Refresh (30s)", value=False)
+
+st.sidebar.subheader("Notifications")
+current_settings = load_settings()
+
+notify_whales = st.sidebar.checkbox(
+    "Notify on WHALES (> $5k)", 
+    value=current_settings["notify_whales"]
+)
+if notify_whales != current_settings["notify_whales"]:
+    save_setting("notify_whales", notify_whales)
+    st.sidebar.success("Updated!")
+    time.sleep(1)
+    st.rerun()
+
+notify_suspicious = st.sidebar.checkbox(
+    "Notify on INSIDERS (Fresh Wallet)", 
+    value=current_settings["notify_suspicious"]
+)
+if notify_suspicious != current_settings["notify_suspicious"]:
+    save_setting("notify_suspicious", notify_suspicious)
+    st.sidebar.success("Updated!")
+    time.sleep(1)
+    st.rerun()
+
+st.sidebar.markdown("---")
+# Auto refresh default TRUE as requested
+auto_refresh = st.sidebar.checkbox("Auto Refresh (30s)", value=True)
 
 if auto_refresh:
     time.sleep(30)
@@ -42,10 +98,7 @@ st.markdown("Real-time tracking of high-value trades and potential insider activ
 df = load_data()
 
 if not df.empty:
-    # Pre-process
     df['timestamp'] = pd.to_datetime(df['timestamp'])
-    max_nonce_threshold = 10 # Should match env but hardcoded for UI logic convenience or loaded from somewhere
-    
     today_df = df[df['timestamp'].dt.date == pd.Timestamp.now().date()]
     
     col1, col2, col3 = st.columns(3)
@@ -55,38 +108,32 @@ if not df.empty:
 
     st.markdown("---")
 
-    # Tabs
-    tab_all, tab_suspicious = st.tabs(["All Large Trades", "Suspicious (New Wallets)"])
-
+    # Filters
+    col_filter1, col_filter2 = st.columns([1, 4])
+    with col_filter1:
+        view_mode = st.radio("View Mode", ["All Trades", "Suspicious Only (Nonce < 10)"])
+    
+    # Data View
     column_config = {
         "polymarket_url": st.column_config.LinkColumn("Market Link"),
         "amount_usd": st.column_config.NumberColumn("Amount (USD)", format="$%.2f"),
         "timestamp": st.column_config.DatetimeColumn("Time", format="D MMM YYYY, h:mm a"),
-        "nonce": st.column_config.NumberColumn("Nonce", help="Transaction count. <10 implies new wallet.")
+        "nonce": st.column_config.NumberColumn("Nonce", help="Transaction count using Polygon RPC")
     }
 
-    with tab_all:
-        st.subheader("High Volume Trades")
-        st.dataframe(
-            df.sort_values(by="timestamp", ascending=False),
-            column_config=column_config,
-            use_container_width=True,
-            hide_index=True
-        )
+    if view_mode == "Suspicious Only (Nonce < 10)":
+        display_df = df[df['nonce'] < 10]
+        st.subheader("Potential Insider Activity")
+    else:
+        display_df = df
+        st.subheader("All High Volume Trades")
 
-    with tab_suspicious:
-        st.subheader("Potential Insider Activity (Nonce < 10)")
-        suspicious_df = df[df['nonce'] < 10].sort_values(by="timestamp", ascending=False)
-        st.dataframe(
-            suspicious_df,
-            column_config=column_config,
-            use_container_width=True,
-            hide_index=True
-        )
+    st.dataframe(
+        display_df.sort_values(by="timestamp", ascending=False),
+        column_config=column_config,
+        use_container_width=True,
+        hide_index=True
+    )
     
 else:
-    st.info("No data detected yet. Waiting for worker...")
-
-# Footer
-st.markdown("---")
-st.caption("Powered by Gamma API & Web3.py")
+    st.info("No data detected yet. Worker is scanning...")

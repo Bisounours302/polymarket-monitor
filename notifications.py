@@ -24,11 +24,15 @@ def send_telegram_alert(alert_data):
         return False
 
     alert_type = alert_data.get("alert_type", "WHALE")
+    config = alert_data.get("config", {})
     
     # Filter Logic
-    if alert_type == "WHALE" and not NOTIFY_WHALES:
+    notify_whales = config.get("notify_whales", NOTIFY_WHALES)
+    notify_suspicious = config.get("notify_suspicious", NOTIFY_SUSPICIOUS)
+    
+    if alert_type == "WHALE" and not notify_whales:
         return False
-    if alert_type == "SUSPICIOUS" and not NOTIFY_SUSPICIOUS:
+    if alert_type == "SUSPICIOUS" and not notify_suspicious:
         return False
 
     # Check if this is a test or real alert

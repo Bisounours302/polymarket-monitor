@@ -7,7 +7,7 @@ from datetime import datetime
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
 from dotenv import load_dotenv
-from database import init_db, get_session, Alert
+from database import init_db, get_session, Alert, GlobalSettings
 
 # Load environment variables
 load_dotenv()
@@ -153,7 +153,18 @@ def main():
                         session.add(new_alert)
                         session.commit()
                         
-                        # Send Telegram (filtering handled in notifications.py)
+                        # Send Telegram (filtering handled here or in notifications, but better to pass config)
+                        # Fetch latest settings
+                        try:
+                            whales_setting = session.query(GlobalSettings).filter_by(key="notify_whales").first()
+                            suspicious_setting = session.query(GlobalSettings).filter_by(key="notify_suspicious").first()
+                            
+                            notify_whales = whales_setting.value.lower() == "true" if whales_setting else True
+                            notify_suspicious = suspicious_setting.value.lower() == "true" if suspicious_setting else True
+                        except:
+                            notify_whales = True
+                            notify_suspicious = True
+
                         alert_data = {
                             "amount_usd": amount_usd,
                             "market_name": market_name,
@@ -161,7 +172,11 @@ def main():
                             "nonce": nonce,
                             "polymarket_url": polymarket_url,
                             "timestamp": datetime.now(),
-                            "alert_type": alert_type
+                            "alert_type": alert_type,
+                            "config": {
+                                "notify_whales": notify_whales,
+                                "notify_suspicious": notify_suspicious
+                            }
                         }
                         send_telegram_alert(alert_data)
             
