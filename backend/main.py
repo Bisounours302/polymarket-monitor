@@ -40,6 +40,16 @@ class SettingsSchema(BaseModel):
 
 # ... (existing code)
 
+# ... (existing code)
+
+# Dependency
+def get_db():
+    db = get_session()
+    try:
+        yield db
+    finally:
+        db.close()
+
 @app.get("/settings")
 def get_settings(db: Session = Depends(get_db)):
     """Get current notification settings."""
