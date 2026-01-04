@@ -79,16 +79,21 @@ def main():
 
             markets = fetch_markets()
             
-            # Save latest state for Debug Inspector
+            # Save latest state for Debug Inspector (Atomic Write)
             try:
                 debug_path = "/app/data/debug_markets.json"
                 # If running locally (not in docker), adjust path
                 if not os.path.exists("/app/data"):
                     debug_path = "data/debug_markets.json"
                     os.makedirs(os.path.dirname(debug_path), exist_ok=True)
-                    
-                with open(debug_path, "w") as f:
+                
+                # Write to temp file first to prevent partial reads
+                temp_path = debug_path + ".tmp"
+                with open(temp_path, "w") as f:
                     json.dump(markets, f, indent=2)
+                    
+                # Atomic swap
+                os.replace(temp_path, debug_path)
             except Exception as e:
                 logger.error(f"Failed to save debug cache: {e}")
             

@@ -116,6 +116,8 @@ def update_settings(settings: SettingsSchema, db: Session = Depends(get_db)):
 def debug_markets():
     import json
     import os
+    from polymarket import fetch_markets
+    
     try:
         # Try reading the Worker's cache first
         cache_path = "/app/data/debug_markets.json"
@@ -123,12 +125,15 @@ def debug_markets():
             cache_path = "data/debug_markets.json" # Local fallback
             
         if os.path.exists(cache_path):
-            with open(cache_path, "r") as f:
-                data = json.load(f)
-            return {"source": "cache", "count": len(data), "data": data}
+            try:
+                with open(cache_path, "r") as f:
+                    data = json.load(f)
+                return {"source": "cache", "count": len(data), "data": data}
+            except json.JSONDecodeError:
+                # Cache corrupted/empty, ignore and fallback
+                pass
             
-        # Fallback to direct fetch if cache missing
-        from polymarket import fetch_markets
+        # Fallback to direct fetch if cache missing or corrupt
         data = fetch_markets()
         return {"source": "live", "count": len(data), "data": data}
     except Exception as e:
