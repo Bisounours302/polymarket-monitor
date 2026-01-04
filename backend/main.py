@@ -36,71 +36,57 @@ class AlertSchema(BaseModel):
 class SettingsSchema(BaseModel):
     notify_whales: bool
     notify_suspicious: bool
+    system_active: bool
 
-# Dependency
-def get_db():
-    db = get_session()
-    try:
-        yield db
-    finally:
-        db.close()
-
-@app.get("/")
-def read_root():
-    return {"status": "running", "service": "Polymarket Monitor API"}
-
-@app.get("/alerts", response_model=List[AlertSchema])
-def get_alerts(limit: int = 50, db: Session = Depends(get_db)):
-    """Get latest alerts."""
-    alerts = db.query(Alert).order_by(Alert.timestamp.desc()).limit(limit).all()
-    return alerts
-
-@app.get("/stats")
-def get_stats(db: Session = Depends(get_db)):
-    """Get dashboard stats."""
-    total_alerts = db.query(Alert).count()
-    # Simple volume sum (if amount_usd is reliable)
-    # Using SQL func usually better but python sum is okay for small db
-    all_alerts = db.query(Alert).all()
-    total_volume = sum([a.amount_usd for a in all_alerts])
-    
-    max_trade = 0
-    if all_alerts:
-        max_trade = max([a.amount_usd for a in all_alerts])
-        
-    return {
-        "total_alerts": total_alerts,
-        "total_volume": total_volume,
-        "max_trade": max_trade
-    }
+# ... (existing code)
 
 @app.get("/settings")
 def get_settings(db: Session = Depends(get_db)):
     """Get current notification settings."""
     whales = db.query(GlobalSettings).filter_by(key="notify_whales").first()
     suspicious = db.query(GlobalSettings).filter_by(key="notify_suspicious").first()
+    system = db.query(GlobalSettings).filter_by(key="system_active").first()
     
     return {
         "notify_whales": whales.value.lower() == "true" if whales else True,
-        "notify_suspicious": suspicious.value.lower() == "true" if suspicious else True
+        "notify_suspicious": suspicious.value.lower() == "true" if suspicious else True,
+        "system_active": system.value.lower() == "true" if system else True
     }
 
 @app.post("/settings")
 def update_settings(settings: SettingsSchema, db: Session = Depends(get_db)):
     """Update notification settings."""
-    # Update Whales
-    whales = db.query(GlobalSettings).filter_by(key="notify_whales").first()
-    if not whales:
-        whales = GlobalSettings(key="notify_whales", value="true")
-        db.add(whales)
-    whales.value = str(settings.notify_whales).lower()
-    
-    # Update Suspicious
-    suspicious = db.query(GlobalSettings).filter_by(key="notify_suspicious").first()
-    if not suspicious:
-        suspicious = GlobalSettings(key="notify_suspicious", value="true")
-        db.add(suspicious)
-    suspicious.value = str(settings.notify_suspicious).lower()
+    # Helper to update/create
+    def update_key(key, val):
+        obj = db.query(GlobalSettings).filter_by(key=key).first()
+        if not obj:
+            obj = GlobalSettings(key=key, value=str(val).lower())
+            db.add(obj)
+        else:
+            obj.value = str(val).lower()
+
+    update_key("notify_whales", settings.notify_whales)
+    update_key("notify_suspicious", settings.notify_suspicious)
+    update_key("system_active", settings.system_active)
     
     db.commit()
     return {"status": "updated", "settings": settings}
+
+# Debug Endpoints
+@app.get("/debug/markets")
+def debug_markets():
+    from worker import fetch_markets
+    try:
+        data = fetch_markets()
+        return {"count": len(data), "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/debug/trades")
+def debug_trades(market_id: str):
+    from worker import fetch_trades_graphql
+    try:
+        data = fetch_trades_graphql(market_id)
+        return {"data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -102,6 +102,14 @@ def main():
     while True:
         try:
             session = get_session()
+            # Check System Status
+            system_setting = session.query(GlobalSettings).filter_by(key="system_active").first()
+            if system_setting and system_setting.value.lower() == "false":
+                logger.info("System paused. Sleeping...")
+                session.close()
+                time.sleep(10)
+                continue
+
             markets = fetch_markets()
             
             logger.info(f"Scanning {len(markets)} active markets...")
