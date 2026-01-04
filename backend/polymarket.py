@@ -36,42 +36,32 @@ def fetch_markets():
         logger.error(f"Error fetching markets: {e}")
         return []
 
-def fetch_trades_graphql(market_id, timestamp_from=None):
+def fetch_trades(market_id, timestamp_from=None):
     """
-    Fetch recent trades using The Graph protocol (Public & Free).
-    Bypasses CLOB API Auth requirements.
-    timestamp_from: Optional unix timestamp to fetch trades from.
+    Fetch recent trades using the Polymarket Data API (Public).
+    Endpoint: https://data-api.polymarket.com/trades
+    Params: 
+      - market: conditionId
+      - limit: 50
     """
     if not market_id:
         return []
 
-    url = "https://api.thegraph.com/subgraphs/name/polymarket/matic-markets-7"
-    
-    time_filter = ""
-    if timestamp_from:
-        time_filter = f', timestamp_gt: "{int(timestamp_from)}"'
-
-    # Query uses market ID (Condition ID or Market Address)
-    query = """
-    {
-      transactions(first: 50, orderBy: timestamp, orderDirection: desc, where: {market: "%s"%s}) {
-        id
-        timestamp
-        tradeAmount
-        user {
-          id
-        }
-      }
+    url = "https://data-api.polymarket.com/trades"
+    params = {
+        "market": market_id,
+        "limit": 50
     }
-    """ % (str(market_id).lower(), time_filter)
+    
+    # If we want to filter by time, Data API supports 'start' (unix params)
+    # But usually we just get latest 50 and filter in worker
+    if timestamp_from:
+         params["start"] = int(timestamp_from)
 
     try:
-        response = requests.post(url, json={'query': query}, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if "data" in data and "transactions" in data["data"]:
-                return data["data"]["transactions"]
-        return []
+        response = requests.get(url, params=params, timeout=5)
+        response.raise_for_status()
+        return response.json()
     except Exception as e:
-        logger.error(f"Graph API Error: {e}")
+        logger.error(f"Data API Error: {e}")
         return []

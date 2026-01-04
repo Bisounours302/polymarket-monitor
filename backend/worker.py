@@ -7,7 +7,50 @@ from web3.middleware import geth_poa_middleware
 from dotenv import load_dotenv
 from database import init_db, get_session, Alert, GlobalSettings
 from notifications import send_telegram_alert
-from polymarket import fetch_markets, fetch_trades_graphql
+from polymarket import fetch_markets, fetch_trades
+
+# ... imports ...
+
+# ... inside main loop ...
+
+            for market in markets:
+                # Use Condition ID for Data API
+                market_id = market.get("conditionId")
+                market_slug = market.get("slug", "unknown")
+                market_name = market.get("question", "Unknown Market")
+                
+                if not market_id:
+                    continue
+                
+                # Fetch trades from Data API
+                trades = fetch_trades(market_id)
+                
+                if trades:
+                    logger.debug(f"Market {market_name[:20]}: {len(trades)} trades fetched.")
+                
+                for trade in trades:
+                    # Parse Data API Object
+                    try:
+                        # Data API format: { size, price, timestamp, proxyWallet, transactionHash ... }
+                        size = float(trade.get('size', 0))
+                        price = float(trade.get('price', 0))
+                        amount_usd = size * price
+                        
+                        timestamp = int(trade.get('timestamp', 0))
+                        wallet_address = trade.get('proxyWallet') or trade.get('maker') or "unknown"
+                        tx_id = trade.get('transactionHash') or f"{market_id}-{timestamp}"
+                        
+                        # Filter by Volume
+                        if amount_usd < MIN_USD_THRESHOLD:
+                            continue
+                        
+                        # Deduplication
+                        if tx_id in processed_hashes:
+                            continue
+                        processed_hashes.add(tx_id)
+                        
+                        # Log Candidate
+                        logger.info(f"Large Trade Found: ${amount_usd:,.2f} on {market_name}")
 
 # Load environment variables
 load_dotenv()
@@ -92,49 +135,31 @@ def main():
             logger.info(f"Scanning {len(markets)} active markets...")
             
             for market in markets:
-                # STRATEGY CHANGE: Use Hex(ClobTokenID) 
-                # Condition ID proved unreliable for Graph queries on this subgraph.
-                # We prioritize the first Token ID converted to Hex.
-                
-                market_id = None
-                clob_ids = market.get("clobTokenIds", [])
-                
-                if clob_ids and len(clob_ids) > 0:
-                    try:
-                        # Convert Decimal String -> Int -> Hex String
-                        # e.g. "9359..." -> 0x19ee...
-                        first_id = clob_ids[0]
-                        if isinstance(first_id, str):
-                           id_val = int(first_id)
-                        else:
-                           id_val = int(first_id)
-                           
-                        market_id = hex(id_val)
-                    except Exception as e:
-                        logger.warning(f"Failed to convert token ID to hex: {e}")
-                        market_id = market.get("conditionId")
-                else:
-                    market_id = market.get("conditionId")
-
+                # Data API uses Condition ID
+                market_id = market.get("conditionId")
                 market_slug = market.get("slug", "unknown")
                 market_name = market.get("question", "Unknown Market")
                 
                 if not market_id:
                     continue
                 
-                # Fetch trades from The Graph
-                trades = fetch_trades_graphql(market_id)
+                # Fetch trades from Data API
+                trades = fetch_trades(market_id)
                 
                 if trades:
                     logger.debug(f"Market {market_name[:20]}: {len(trades)} trades fetched.")
                 
                 for trade in trades:
-                    # Parse Graph Data
+                    # Parse Data API Object
                     try:
-                        amount_usd = float(trade.get('tradeAmount', 0))
+                        # Data API format: { size, price, timestamp, proxyWallet, transactionHash ... }
+                        size = float(trade.get('size', 0))
+                        price = float(trade.get('price', 0))
+                        amount_usd = size * price
+                        
                         timestamp = int(trade.get('timestamp', 0))
-                        wallet_address = trade.get('user', {}).get('id')
-                        tx_id = trade.get('id')
+                        wallet_address = trade.get('proxyWallet') or trade.get('maker') or "unknown"
+                        tx_id = trade.get('transactionHash') or f"{market_id}-{timestamp}"
                         
                         # Filter by Volume
                         if amount_usd < MIN_USD_THRESHOLD:
