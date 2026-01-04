@@ -13,7 +13,13 @@ import clsx from "clsx";
 
 const API_URL = import.meta.env.VITE_API_URL || "/api";
 
-const fetcher = (url) => fetch(url).then((res) => res.json());
+const API_URL = import.meta.env.VITE_API_URL || "/api";
+console.log("Using API_URL:", API_URL);
+
+const fetcher = (url) => fetch(url).then((res) => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+});
 
 function App() {
     const { data: alerts } = useSWR(`${API_URL}/alerts?limit=50`, fetcher, { refreshInterval: 5000 });
