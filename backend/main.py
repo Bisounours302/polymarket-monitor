@@ -111,9 +111,10 @@ def update_settings(settings: SettingsSchema, db: Session = Depends(get_db)):
     return {"status": "updated", "settings": settings}
 
 # Debug Endpoints
+# Debug Endpoints
 @app.get("/debug/markets")
 def debug_markets():
-    from worker import fetch_markets
+    from polymarket import fetch_markets
     try:
         data = fetch_markets()
         return {"count": len(data), "data": data}
@@ -122,7 +123,7 @@ def debug_markets():
 
 @app.get("/debug/trades")
 def debug_trades(market_id: str):
-    from worker import fetch_trades_graphql
+    from polymarket import fetch_trades_graphql
     import time
     try:
         # Fetch trades from the last 24 hours for debugging
