@@ -56,14 +56,6 @@ def get_nonce(wallet_address):
 def main():
     logger.info("Starting Polymarket Public Monitor (Read-Only)...")
     
-    # Send Test Notification on Startup
-    logger.info("Sending startup test notification...")
-    test_sent = send_telegram_alert({"is_test": True})
-    if test_sent:
-        logger.info("Startup test notification sent successfully.")
-    else:
-        logger.error("Failed to send startup test notification. Check Telegram Config.")
-
     processed_hashes = set()
     
     while True:
