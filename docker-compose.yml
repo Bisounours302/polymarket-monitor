@@ -1,28 +1,37 @@
-
-
 services:
-  monitor:
-    build: .
-    container_name: polymarket-monitor
-    command: python monitor.py
+  backend:
+    build: ./backend
+    restart: always
     volumes:
-      - .:/app
-      - ./data:/data
-    env_file:
-      - .env
-    restart: unless-stopped
+      - ./data:/app/data
+    environment:
+      - DB_PATH=sqlite:////app/data/alerts.db
+    expose:
+      - "8000"
 
-  dashboard:
-    build: .
-    container_name: polymarket-dashboard
-    command: streamlit run app.py --server.port 8501 --server.address 0.0.0.0
-    ports:
-      - "8501:8501"
+  worker:
+    build: ./backend
+    restart: always
+    command: python worker.py
     volumes:
-      - .:/app
-      - ./data:/data
-    env_file:
-      - .env
+      - ./data:/app/data
+    environment:
+      - DB_PATH=sqlite:////app/data/alerts.db
+      - POLYGON_RPC_URL=${POLYGON_RPC_URL}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - MIN_USD_THRESHOLD=${MIN_USD_THRESHOLD:-5000}
+      - MAX_NONCE_THRESHOLD=${MAX_NONCE_THRESHOLD:-10}
+      # Notifications are read from DB, but defaults use these if DB empty
+      - NOTIFY_WHALES=${NOTIFY_WHALES:-true}
+      - NOTIFY_SUSPICIOUS=${NOTIFY_SUSPICIOUS:-true}
     depends_on:
-      - monitor
-    restart: unless-stopped
+      - backend
+
+  frontend:
+    build: ./frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
