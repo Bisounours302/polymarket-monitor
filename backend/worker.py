@@ -1,4 +1,5 @@
 import os
+import json
 import time
 import requests
 import logging
@@ -124,7 +125,20 @@ def main():
             logger.info(f"Scanning {len(markets)} active markets...")
             
             for market in markets:
-                clob_id = market.get("clobTokenIds", [None])[0]
+                # Handle clobTokenIds which can be a list or a stringified JSON list
+                raw_clob_ids = market.get("clobTokenIds")
+                if isinstance(raw_clob_ids, str):
+                    try:
+                        clob_ids = json.loads(raw_clob_ids)
+                    except:
+                        clob_ids = []
+                elif isinstance(raw_clob_ids, list):
+                    clob_ids = raw_clob_ids
+                else:
+                    clob_ids = []
+
+                clob_id = clob_ids[0] if clob_ids else None
+                
                 market_slug = market.get("slug", "unknown")
                 market_name = market.get("question", "Unknown Market")
                 
