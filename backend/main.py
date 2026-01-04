@@ -95,8 +95,11 @@ def debug_markets():
 @app.get("/debug/trades")
 def debug_trades(market_id: str):
     from worker import fetch_trades_graphql
+    import time
     try:
-        data = fetch_trades_graphql(market_id)
-        return {"data": data}
+        # Fetch trades from the last 24 hours for debugging
+        one_day_ago = time.time() - (24 * 3600)
+        data = fetch_trades_graphql(market_id, timestamp_from=one_day_ago)
+        return {"count": len(data), "data": data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
