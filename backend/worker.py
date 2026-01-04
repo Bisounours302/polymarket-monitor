@@ -63,16 +63,25 @@ def fetch_markets():
         logger.error(f"Error fetching markets: {e}")
         return []
 
-def fetch_trades_graphql(market_id):
+def fetch_trades_graphql(market_id, timestamp_from=None):
     """
     Fetch recent trades using The Graph protocol (Public & Free).
     Bypasses CLOB API Auth requirements.
+    timestamp_from: Optional unix timestamp to fetch trades from.
     """
     url = "https://api.thegraph.com/subgraphs/name/polymarket/matic-markets-7"
     
+    # Use provided timestamp or fallback to very recent (live mode)
+    # in live mode (monitor), we might want to track last run time, 
+    # but for simplicity here we just fetch last 10 trades if no time provided.
+    
+    time_filter = ""
+    if timestamp_from:
+        time_filter = f', timestamp_gt: "{int(timestamp_from)}"'
+
     query = """
     {
-      transactions(first: 10, orderBy: timestamp, orderDirection: desc, where: {market: "%s"}) {
+      transactions(first: 50, orderBy: timestamp, orderDirection: desc, where: {market: "%s"%s}) {
         id
         timestamp
         tradeAmount
@@ -81,7 +90,7 @@ def fetch_trades_graphql(market_id):
         }
       }
     }
-    """ % market_id.lower()
+    """ % (market_id.lower(), time_filter)
 
     try:
         response = requests.post(url, json={'query': query}, timeout=5)
