@@ -34,65 +34,58 @@ if auto_refresh:
 if st.sidebar.button("Refresh Now"):
     st.rerun()
 
-st.sidebar.markdown("---")
-if st.sidebar.button("📨 Test Telegram Alert"):
-    st.sidebar.info("Sending test notification...")
-    from notifications import send_telegram_alert
-    success = send_telegram_alert({"is_test": True})
-    if success:
-        st.sidebar.success("Test sent! Check your Telegram.")
-    else:
-        st.sidebar.error("Failed to send. Check logs/credentials.")
-
 # Main Content
-st.title("🕵️ Polymarket Insider Trading Monitor")
-st.markdown("Dashboard for tracking suspicious high-value trades from new wallets.")
+st.title("Polymarket Monitor")
+st.markdown("Real-time tracking of high-value trades and potential insider activity.")
 
 # Metrics
 df = load_data()
 
 if not df.empty:
-    col1, col2, col3 = st.columns(3)
-    
-    # Metric 1: Total Alerts
-    col1.metric("Total Alerts", len(df))
-    
-    # Metric 2: Today's Volume Detected
+    # Pre-process
     df['timestamp'] = pd.to_datetime(df['timestamp'])
+    max_nonce_threshold = 10 # Should match env but hardcoded for UI logic convenience or loaded from somewhere
+    
     today_df = df[df['timestamp'].dt.date == pd.Timestamp.now().date()]
-    today_vol = today_df['amount_usd'].sum()
-    col2.metric("Suspicious Volume (Today)", f"${today_vol:,.2f}")
     
-    # Metric 3: Max Single Trade
-    max_trade = df['amount_usd'].max()
-    col3.metric("Max Single Trade", f"${max_trade:,.2f}")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Alerts", len(df))
+    col2.metric("Volume Today", f"${today_df['amount_usd'].sum():,.2f}")
+    col3.metric("Max Trade", f"${df['amount_usd'].max():,.2f}")
 
-    # Data Table
-    st.subheader("Recent Alerts")
-    
-    # Sort Options
-    sort_col = st.selectbox("Sort by", ["timestamp", "amount_usd", "nonce"], index=0)
-    sort_asc = st.checkbox("Ascending", value=False)
-    
-    df_sorted = df.sort_values(by=sort_col, ascending=sort_asc)
-    
-    # Display formatted table
-    st.dataframe(
-        df_sorted[[
-            "timestamp", "market_name", "amount_usd", 
-            "wallet_address", "nonce", "polymarket_url"
-        ]],
-        column_config={
-            "polymarket_url": st.column_config.LinkColumn("Market Link"),
-            "amount_usd": st.column_config.NumberColumn("Amount (USD)", format="$%.2f"),
-            "timestamp": st.column_config.DatetimeColumn("Detected At", format="D MMM YYYY, h:mm a")
-        },
-        use_container_width=True,
-        hide_index=True
-    )
+    st.markdown("---")
+
+    # Tabs
+    tab_all, tab_suspicious = st.tabs(["All Large Trades", "Suspicious (New Wallets)"])
+
+    column_config = {
+        "polymarket_url": st.column_config.LinkColumn("Market Link"),
+        "amount_usd": st.column_config.NumberColumn("Amount (USD)", format="$%.2f"),
+        "timestamp": st.column_config.DatetimeColumn("Time", format="D MMM YYYY, h:mm a"),
+        "nonce": st.column_config.NumberColumn("Nonce", help="Transaction count. <10 implies new wallet.")
+    }
+
+    with tab_all:
+        st.subheader("High Volume Trades")
+        st.dataframe(
+            df.sort_values(by="timestamp", ascending=False),
+            column_config=column_config,
+            use_container_width=True,
+            hide_index=True
+        )
+
+    with tab_suspicious:
+        st.subheader("Potential Insider Activity (Nonce < 10)")
+        suspicious_df = df[df['nonce'] < 10].sort_values(by="timestamp", ascending=False)
+        st.dataframe(
+            suspicious_df,
+            column_config=column_config,
+            use_container_width=True,
+            hide_index=True
+        )
     
 else:
-    st.info("No alerts detected yet. Waiting for worker to find suspicious trades...")
+    st.info("No data detected yet. Waiting for worker...")
 
 # Footer
 st.markdown("---")

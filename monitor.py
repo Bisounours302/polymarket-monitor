@@ -132,13 +132,16 @@ def main():
                     # Check Nonce
                     nonce = get_nonce(wallet_address)
                     
-                    if nonce is not None and nonce < MAX_NONCE_THRESHOLD:
-                        # CRITICAL ALERT
-                        logger.info(f"ALARM! Suspicious trade detected: {amount_usd} USD by {wallet_address} (Nonce: {nonce})")
+                    if nonce is not None:
+                        is_suspicious = nonce < MAX_NONCE_THRESHOLD
+                        alert_type = "SUSPICIOUS" if is_suspicious else "WHALE"
+                        
+                        # Log detection
+                        logger.info(f"[{alert_type}] {amount_usd} USD by {wallet_address} (Nonce: {nonce})")
                         
                         polymarket_url = f"https://polymarket.com/event/{market_slug}"
                         
-                        # Save to DB
+                        # Save to DB (We save ALL large trades now)
                         new_alert = Alert(
                             market_name=market_name,
                             amount_usd=amount_usd,
@@ -150,14 +153,15 @@ def main():
                         session.add(new_alert)
                         session.commit()
                         
-                        # Send Telegram
+                        # Send Telegram (filtering handled in notifications.py)
                         alert_data = {
                             "amount_usd": amount_usd,
                             "market_name": market_name,
                             "wallet_address": wallet_address,
                             "nonce": nonce,
                             "polymarket_url": polymarket_url,
-                            "timestamp": datetime.now()
+                            "timestamp": datetime.now(),
+                            "alert_type": alert_type
                         }
                         send_telegram_alert(alert_data)
             
