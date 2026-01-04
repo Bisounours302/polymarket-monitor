@@ -40,7 +40,45 @@ function App() {
     // Debug State
     const [debugData, setDebugData] = useState(null);
     const [debugLoading, setDebugLoading] = useState(false);
-    const [debugViewMode, setDebugViewMode] = useState("SMART");
+    const [debugViewMode, setDebugViewMode] = useState("SMART"); // "SMART" | "RAW" | "SCANNER"
+
+    // Auto-Refresh Logic
+    const [refreshTimer, setRefreshTimer] = useState(5);
+
+    useEffect(() => {
+        if (!showDebug) return;
+
+        const fetchData = async () => {
+            try {
+                if (debugViewMode === "SMART" || debugViewMode === "RAW") {
+                    const res = await fetch(`${API_URL}/debug/markets`);
+                    const data = await res.json();
+                    setDebugData({ type: "markets", content: data });
+                } else if (debugViewMode === "SCANNER") {
+                    const res = await fetch(`${API_URL}/debug/feed`);
+                    const data = await res.json();
+                    setDebugData({ type: "scanner", content: data });
+                }
+            } catch (e) {
+                console.error("Auto-fetch error:", e);
+            }
+        };
+
+        // Initial Fetch
+        fetchData();
+
+        const interval = setInterval(() => {
+            setRefreshTimer((prev) => {
+                if (prev <= 1) {
+                    fetchData();
+                    return 5;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [showDebug, debugViewMode]);
 
     // Auto-fetch debug data when modal opens
     useEffect(() => {
