@@ -42,6 +42,8 @@ class SettingsSchema(BaseModel):
 
 # ... (existing code)
 
+# ... existing code ...
+
 # Dependency
 def get_db():
     db = get_session()
@@ -50,7 +52,16 @@ def get_db():
     finally:
         db.close()
 
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "backend", "message": "Polymarket Monitor API"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
 @app.get("/settings")
+# ... existing code ...
 def get_settings(db: Session = Depends(get_db)):
     """Get current notification settings."""
     whales = db.query(GlobalSettings).filter_by(key="notify_whales").first()
