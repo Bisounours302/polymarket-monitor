@@ -31,7 +31,7 @@ A containerized Python application to detect suspicious behaviors (e.g., large b
 
 3. **Start the Application:**
    ```bash
-   docker-compose up -d
+   docker compose up -d --build
    ```
 
 4. **Access the Dashboard:**
@@ -41,13 +41,13 @@ A containerized Python application to detect suspicious behaviors (e.g., large b
 
 To see if the monitor is working:
 ```bash
-docker-compose logs -f monitor
+docker compose logs -f monitor
 ```
 
 ## Stopping
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ## Architecture
