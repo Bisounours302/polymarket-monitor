@@ -60,6 +60,23 @@ def root():
 def health_check():
     return {"status": "ok"}
 
+@app.get("/alerts", response_model=List[AlertSchema])
+def get_alerts(limit: int = 50, db: Session = Depends(get_db)):
+    """Fetch latest alerts."""
+    alerts = db.query(Alert).order_by(Alert.timestamp.desc()).limit(limit).all()
+    return alerts
+
+@app.get("/stats")
+def get_stats(db: Session = Depends(get_db)):
+    """Get aggregated stats."""
+    from sqlalchemy import func
+    total_alerts = db.query(func.count(Alert.id)).scalar()
+    total_volume = db.query(func.sum(Alert.amount_usd)).scalar() or 0
+    return {
+        "total_alerts": total_alerts,
+        "total_volume": round(total_volume, 2)
+    }
+
 @app.get("/settings")
 # ... existing code ...
 def get_settings(db: Session = Depends(get_db)):
