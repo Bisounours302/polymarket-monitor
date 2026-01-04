@@ -158,8 +158,12 @@ def main():
                     continue
                 
                 # Fetch trades from Data API
-                trades = fetch_trades(market_id)
-                
+                if trades:
+                    logger.debug(f"Market {market_name[:20]}: {len(trades)} trades fetched.")
+
+                for trade in trades:
+                    # Parse Data API Object
+                    try:
                         size = float(trade.get('size', 0))
                         price = float(trade.get('price', 0))
                         amount_usd = size * price
