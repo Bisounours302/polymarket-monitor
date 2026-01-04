@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  monitor:
+    build: .
+    container_name: polymarket-monitor
+    command: python monitor.py
+    volumes:
+      - .:/app
+      - ./data:/data
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  dashboard:
+    build: .
+    container_name: polymarket-dashboard
+    command: streamlit run app.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+      - ./data:/data
+    env_file:
+      - .env
+    depends_on:
+      - monitor
+    restart: unless-stopped
