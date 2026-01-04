@@ -50,35 +50,7 @@ def get_nonce(wallet_address):
         logger.error(f"Error fetching nonce for {wallet_address}: {e}")
         return None
 
-def send_telegram_alert(alert_data):
-    """Send formatted alert to Telegram."""
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        logger.warning("Telegram credentials not set. Skipping notification.")
-        return
-
-    message = (
-        f"🚨 **INSIDER / WHALE ALERT** 🚨\n\n"
-        f"💰 **Amount:** ${alert_data['amount_usd']:,.2f}\n"
-        f"📉 **Market:** {alert_data['market_name']}\n"
-        f"👤 **Wallet:** `{alert_data['wallet_address']}`\n"
-        f"🆕 **Nonce:** {alert_data['nonce']} (New Account!)\n"
-        f"🔗 [View on Polymarket]({alert_data['polymarket_url']})\n"
-        f"🕒 {alert_data['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}"
-    )
-    
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
-    
-    try:
-        response = requests.post(url, json=payload, timeout=10)
-        if response.status_code != 200:
-            logger.error(f"Telegram API Error: {response.text}")
-    except Exception as e:
-        logger.error(f"Failed to send Telegram message: {e}")
+from notifications import send_telegram_alert
 
 def fetch_markets():
     """Fetch top active markets by volume from Gamma API."""

@@ -34,6 +34,16 @@ if auto_refresh:
 if st.sidebar.button("Refresh Now"):
     st.rerun()
 
+st.sidebar.markdown("---")
+if st.sidebar.button("📨 Test Telegram Alert"):
+    st.sidebar.info("Sending test notification...")
+    from notifications import send_telegram_alert
+    success = send_telegram_alert({"is_test": True})
+    if success:
+        st.sidebar.success("Test sent! Check your Telegram.")
+    else:
+        st.sidebar.error("Failed to send. Check logs/credentials.")
+
 # Main Content
 st.title("🕵️ Polymarket Insider Trading Monitor")
 st.markdown("Dashboard for tracking suspicious high-value trades from new wallets.")
